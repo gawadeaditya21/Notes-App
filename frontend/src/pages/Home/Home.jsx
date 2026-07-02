@@ -1,171 +1,417 @@
-import { useState, useEffect, useContext } from 'react';
+import { useState, useEffect, useContext, useMemo, useRef, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import API from '../../utils/api';
 import { AuthContext } from '../../context/AuthContext';
 import toast from 'react-hot-toast';
-import { LogOut, Plus, Save, Edit2, Trash2, X } from 'lucide-react'; // Import Icons
+import { Clock, Plus, Star, Edit2, Trash2, Search, X } from 'lucide-react';
+import Sidebar from './Sidebar';
+import NoteDrawer from './NoteDrawer';
 
+/**
+ * Home — Studio Workspace with Favorites + Tags support
+ *
+ * State:
+ *   notes[]          — all notes from API
+ *   formData         — { title, content, isFavorite, tags }
+ *   editingNoteId    — null | string
+ *   drawerOpen       — boolean
+ *   filter           — 'all' | 'favorites'
+ *   selectedTag      — string | null
+ *
+ * Derived:
+ *   allTags          — sorted unique tag array across all notes
+ *   filteredNotes    — notes filtered by filter + selectedTag
+ */
 const Home = () => {
-    const [notes, setNotes] = useState([]);
-    const [formData, setFormData] = useState({ title: '', content: ''});
+    const [notes, setNotes]               = useState([]);
+    const [formData, setFormData]         = useState({ title: '', content: '', isFavorite: false, tags: [] });
     const [editingNoteId, setEditingNoteId] = useState(null);
+    const [drawerOpen, setDrawerOpen]     = useState(false);
+    const [filter, setFilter]             = useState('all');       // 'all' | 'favorites'
+    const [selectedTag, setSelectedTag]   = useState(null);        // string | null
+    const [searchQuery, setSearchQuery]   = useState('');          // free-text search
 
-    const {user, logout} = useContext(AuthContext);
+    const searchRef = useRef(null);
+
+    const { user } = useContext(AuthContext);
     const navigate = useNavigate();
 
-    // FETCH DATA
+    /* ── Fetch notes on mount ── */
     useEffect(() => {
-        if(!user) {
-            navigate('/login');
-            return;
-        }
-
+        if (!user) { navigate('/login'); return; }
         const fetchNotes = async () => {
             try {
                 const res = await API.get('/notes');
                 setNotes(res.data);
-            } catch(error) {    
-                toast.error("Failed to fetch notes", error);
+            } catch {
+                toast.error('Failed to load notes');
             }
         };
         fetchNotes();
     }, [user, navigate]);
 
-    // SAVE AND UPDATE NOTE
-    const handleSubmit = async(e) => {
-        e.preventDefault();
+    /* ── Derived: all unique tags ── */
+    const allTags = useMemo(() => {
+        const set = new Set();
+        notes.forEach((n) => (n.tags ?? []).forEach((t) => set.add(t)));
+        return [...set].sort();
+    }, [notes]);
 
+    /* ── Derived: filtered + searched notes ── */
+    const filteredNotes = useMemo(() => {
+        const q = searchQuery.trim().toLowerCase();
+        return notes
+            .filter((n) => (filter === 'favorites' ? n.isFavorite : true))
+            .filter((n) => (selectedTag ? (n.tags ?? []).includes(selectedTag) : true))
+            .filter((n) => {
+                if (!q) return true;
+                const inTitle   = n.title.toLowerCase().includes(q);
+                const inContent = n.content.replace(/<[^>]*>/g, '').toLowerCase().includes(q);
+                const inTags    = (n.tags ?? []).some((t) => t.toLowerCase().includes(q));
+                return inTitle || inContent || inTags;
+            });
+    }, [notes, filter, selectedTag, searchQuery]);
+
+    const favoriteCount = useMemo(() => notes.filter((n) => n.isFavorite).length, [notes]);
+
+    /* ── Drawer helpers ── */
+    const openNewNote = () => {
+        setFormData({ title: '', content: '', isFavorite: false, tags: [] });
+        setEditingNoteId(null);
+        setDrawerOpen(true);
+    };
+
+    const openEditNote = (note) => {
+        setFormData({
+            title:      note.title,
+            content:    note.content,
+            isFavorite: note.isFavorite ?? false,
+            tags:       note.tags ?? [],
+        });
+        setEditingNoteId(note._id);
+        setDrawerOpen(true);
+    };
+
+    const closeDrawer = () => {
+        setDrawerOpen(false);
+        setTimeout(() => {
+            setFormData({ title: '', content: '', isFavorite: false, tags: [] });
+            setEditingNoteId(null);
+        }, 350);
+    };
+
+    /* ── Save / Update ── */
+    const handleSave = async () => {
+        const stripped = formData.content.replace(/<[^>]*>/g, '').trim();
+        if (!formData.title.trim() || !stripped) {
+            toast.error('Please fill in both a title and some content.');
+            return;
+        }
         try {
             if (editingNoteId) {
                 const res = await API.put(`/notes/${editingNoteId}`, formData);
-                setNotes(notes.map((note) => note._id = editingNoteId ? res.data : note));
-                setEditingNoteId(null);
-                toast.success("Note updated successfully!");
+                setNotes((prev) => prev.map((n) => (n._id === editingNoteId ? res.data : n)));
+                toast.success('Note updated!');
             } else {
                 const res = await API.post('/notes', formData);
-                setNotes([res.data, ...notes]);
-                toast.success("Note created!");
+                setNotes((prev) => [res.data, ...prev]);
+                toast.success('Note saved!');
             }
-            setFormData({title: '', content:''});
-        } catch(error) {
-            toast.error("Failed to create note", error);
+            closeDrawer();
+        } catch {
+            toast.error('Failed to save note. Please try again.');
         }
     };
 
-    // SETUP EDIT MODE
-    const handleEditSetup = (note) => {
-        setFormData({ title: note.title, content: note.content});
-        setEditingNoteId(note._id);
-        window.scrollTo({ top: 0, behavior: 'smooth'});
+    /* ── Quick-toggle favorite (no drawer open) ── */
+    const handleToggleFavorite = async (e, note) => {
+        e.stopPropagation(); // don't bubble to card
+        try {
+            const res = await API.put(`/notes/${note._id}`, { isFavorite: !note.isFavorite });
+            setNotes((prev) => prev.map((n) => (n._id === note._id ? res.data : n)));
+        } catch {
+            toast.error('Failed to update favorite');
+        }
     };
 
-    // CANCEL EDIT MODE
-    const cancelEdit = () =>{
-        setFormData({ title: '', content: ''});
-        setEditingNoteId(null);
-    };
-
-    // DELETE NOTE
-    const handleDeleteNote = async(id) => {
+    /* ── Delete ── */
+    const handleDelete = async (e, id) => {
+        e.stopPropagation();
         try {
             await API.delete(`/notes/${id}`);
-            setNotes(notes.filter((note) => note._id != id));
-            toast.success("Note deleted");
-        } catch(error) {
-            toast.error("Failed to create note", error);
+            setNotes((prev) => prev.filter((n) => n._id !== id));
+            toast.success('Note deleted');
+        } catch {
+            toast.error('Failed to delete note');
         }
     };
 
-    const handleLogout = () => {
-        logout();
-        toast.success("Logged out successfully");
-        navigate('login');
-    }
+    /* ── Helpers ── */
+    const formatDate = (dateStr) => {
+        if (!dateStr) return '';
+        return new Date(dateStr).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+    };
+
+    const clearFilter = () => {
+        setFilter('all');
+        setSelectedTag(null);
+    };
+
+    /* ── Global keyboard shortcut: Ctrl+K / Cmd+K → focus search ── */
+    useEffect(() => {
+        const onKey = (e) => {
+            if ((e.ctrlKey || e.metaKey) && e.key === 'k') {
+                e.preventDefault();
+                searchRef.current?.focus();
+                searchRef.current?.select();
+            }
+            if (e.key === 'Escape' && document.activeElement === searchRef.current) {
+                setSearchQuery('');
+                searchRef.current?.blur();
+            }
+        };
+        window.addEventListener('keydown', onKey);
+        return () => window.removeEventListener('keydown', onKey);
+    }, []);
+
+    const isFiltering   = filter === 'favorites' || !!selectedTag;
+    const isSearching   = searchQuery.trim().length > 0;
+    const hasActiveView = isFiltering || isSearching;
+
+    // Dynamic canvas title
+    const canvasTitle =
+        isSearching            ? 'Search Results'
+        : filter === 'favorites' ? 'Favorites'
+        : selectedTag            ? `#${selectedTag}`
+        :                          'My Notes';
 
     if (!user) return null;
 
     return (
-        <div className="container">
-            {/* Header Area */}
-            <header className="flex-between" style={{ marginBottom: '2rem' }}>
-                <h2 style={{ color: 'var(--text-main)' }}>Welcome, {user.name}</h2>
-                <button onClick={handleLogout} className="btn btn-danger">
-                    <LogOut size={18} /> Logout
-                </button>
-            </header>
+        <div className={`workspace-shell${drawerOpen ? ' drawer-open' : ''}`}>
 
-            {/* Dynamic Form */}
-            <div className="card animate-card">
-                <h3 style={{ marginBottom: '1rem', color: 'var(--primary)' }}>
-                    {editingNoteId ? 'Update your Note' : 'Create a New Note'}
-                </h3>
-                <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
-                    <input 
-                        type="text" 
-                        placeholder="Note Title" 
-                        value={formData.title}
-                        onChange={(e) => setFormData({ ...formData, title: e.target.value })}
-                        required 
-                        className="input-field"
-                    />
-                    <textarea 
-                        placeholder="Note Content" 
-                        value={formData.content}
-                        onChange={(e) => setFormData({ ...formData, content: e.target.value })}
-                        required 
-                        rows="4"
-                        className="input-field"
-                    />
-                    
-                    <div className="flex-gap">
-                        <button type="submit" className="btn btn-primary" style={{ flex: 1 }}>
-                            {editingNoteId ? <><Save size={18} /> Update Note</> : <><Plus size={18} /> Save Note</>}
-                        </button>
-                        
-                        {editingNoteId && (
-                            <button type="button" onClick={cancelEdit} className="btn" style={{ background: 'var(--text-muted)', color: 'white', flex: 1 }}>
-                                <X size={18} /> Cancel
-                            </button>
-                        )}
+            {/* ── Left Sidebar ── */}
+            <Sidebar
+                filter={filter}
+                setFilter={setFilter}
+                selectedTag={selectedTag}
+                setSelectedTag={setSelectedTag}
+                allTags={allTags}
+                noteCount={notes.length}
+                favoriteCount={favoriteCount}
+            />
+
+            {/* ── Main Canvas ── */}
+            <main className="main-canvas">
+
+                {/* Canvas header */}
+                <div className="canvas-header">
+                    <div>
+                        <h1 className="canvas-title">{canvasTitle}</h1>
+                        <p className="canvas-subtitle">
+                            {filteredNotes.length === 0
+                                ? 'No notes here yet'
+                                : `${filteredNotes.length} ${filteredNotes.length === 1 ? 'note' : 'notes'}`}
+                        </p>
                     </div>
-                </form>
-            </div>
+                    <button
+                        id="header-new-note-btn"
+                        className="header-new-btn"
+                        onClick={openNewNote}
+                        aria-label="Create new note"
+                    >
+                        <Plus size={15} />
+                        New Note
+                    </button>
+                </div>
 
-            {/* Display Notes Grid */}
-            <div className="notes-grid">
-                {notes.length === 0 ? (
-                    <p style={{ gridColumn: '1 / -1', textAlign: 'center', color: 'var(--text-muted)', padding: '2rem' }}>
-                        No notes yet. Create your first one above!
-                    </p>
-                ) : (
-                    notes.map((note, index) => (
-                        <div 
-                            key={note._id} 
-                            className="card animate-card" 
-                            style={{ animationDelay: `${index * 0.05}s` }} /* Staggers the fade-in animation */
+                {/* Search bar */}
+                <div className="canvas-search-bar">
+                    <Search size={15} className="search-icon" />
+                    <input
+                        ref={searchRef}
+                        id="notes-search-input"
+                        type="search"
+                        className="search-input"
+                        placeholder="Search notes… (Ctrl+K)"
+                        value={searchQuery}
+                        onChange={(e) => setSearchQuery(e.target.value)}
+                        aria-label="Search notes"
+                        autoComplete="off"
+                        spellCheck={false}
+                    />
+                    {isSearching && (
+                        <button
+                            className="search-clear-btn"
+                            onClick={() => { setSearchQuery(''); searchRef.current?.focus(); }}
+                            aria-label="Clear search"
+                            title="Clear search"
                         >
-                            <h3 style={{ marginBottom: '0.5rem', paddingRight: '70px', color: 'var(--text-main)' }}>
-                                {note.title}
-                            </h3>
-                            <p style={{ color: 'var(--text-muted)', whiteSpace: 'pre-wrap', lineHeight: '1.5' }}>
-                                {note.content}
-                            </p>
-                            
-                            {/* Floating Action Icons */}
-                            <div className="flex-gap" style={{ position: 'absolute', top: '1.5rem', right: '1.5rem' }}>
-                                <button onClick={() => handleEditSetup(note)} className="btn btn-warning btn-icon-only">
-                                    <Edit2 size={16} />
-                                </button>
-                                <button onClick={() => handleDeleteNote(note._id)} className="btn btn-danger btn-icon-only">
-                                    <Trash2 size={16} />
-                                </button>
-                            </div>
-                        </div>
-                    ))
+                            <X size={13} />
+                        </button>
+                    )}
+                </div>
+
+                {/* Active filter bar */}
+                {(isFiltering || isSearching) && (
+                    <div className="canvas-filter-bar" role="status" aria-live="polite">
+                        <span>
+                            {isSearching
+                                ? `🔍 Searching for "${searchQuery.trim()}"`
+                                : filter === 'favorites'
+                                ? '⭐ Showing favorited notes'
+                                : `🏷 Filtered by #${selectedTag}`}
+                        </span>
+                        <button
+                            className="canvas-filter-clear"
+                            onClick={() => { clearFilter(); setSearchQuery(''); }}
+                        >
+                            Clear all ×
+                        </button>
+                    </div>
                 )}
-            </div>
+
+                {/* Notes grid / Empty state */}
+                {filteredNotes.length === 0 ? (
+                    <div className="empty-canvas">
+                        <div className="empty-canvas-icon">
+                            {isSearching ? '🔍' : filter === 'favorites' ? '⭐' : selectedTag ? '🏷' : '✦'}
+                        </div>
+                        <h3>
+                            {isSearching
+                                ? `No results for "${searchQuery.trim()}"`
+                                : filter === 'favorites'
+                                ? 'No favorites yet'
+                                : selectedTag
+                                ? `No notes tagged #${selectedTag}`
+                                : 'Your workspace is empty'}
+                        </h3>
+                        <p>
+                            {isSearching
+                                ? 'Try different keywords or clear the search'
+                                : filter === 'favorites'
+                                ? 'Star a note to save it here'
+                                : selectedTag
+                                ? 'Try a different tag or clear the filter'
+                                : 'Click New Note or the + button to get started'}
+                        </p>
+                    </div>
+                ) : (
+                    <div className="masonry-grid" aria-label="Notes grid">
+                        {filteredNotes.map((note, index) => (
+                            <div
+                                key={note._id}
+                                className="masonry-item note-card"
+                                style={{ animationDelay: `${Math.min(index * 0.05, 0.4)}s` }}
+                                aria-label={`Note: ${note.title}`}
+                            >
+                                <div className="note-card-inner">
+
+                                    {/* ── Quick-favorite star (top-right, absolute) ── */}
+                                    <button
+                                        id={`fav-note-${note._id}`}
+                                        className={`card-fav-btn${note.isFavorite ? ' is-favorite' : ''}`}
+                                        onClick={(e) => handleToggleFavorite(e, note)}
+                                        title={note.isFavorite ? 'Remove from favorites' : 'Add to favorites'}
+                                        aria-label={note.isFavorite ? 'Remove from favorites' : 'Add to favorites'}
+                                        aria-pressed={!!note.isFavorite}
+                                    >
+                                        <Star
+                                            size={14}
+                                            fill={note.isFavorite ? 'currentColor' : 'none'}
+                                        />
+                                    </button>
+
+                                    {/* Title */}
+                                    <h3 className="note-card-title">{note.title}</h3>
+
+                                    {/* Rich text preview */}
+                                    <div
+                                        className="note-card-content"
+                                        dangerouslySetInnerHTML={{ __html: note.content }}
+                                    />
+
+                                    {/* Tags */}
+                                    {(note.tags ?? []).length > 0 && (
+                                        <div className="note-tags" aria-label="Note tags">
+                                            {note.tags.map((tag) => (
+                                                <span
+                                                    key={tag}
+                                                    className="note-tag-pill"
+                                                    role="button"
+                                                    tabIndex={0}
+                                                    onClick={() => {
+                                                        setSelectedTag(tag);
+                                                        setFilter('all');
+                                                    }}
+                                                    onKeyDown={(e) => {
+                                                        if (e.key === 'Enter') { setSelectedTag(tag); setFilter('all'); }
+                                                    }}
+                                                    title={`Filter by #${tag}`}
+                                                    aria-label={`Tag: ${tag}. Click to filter.`}
+                                                >
+                                                    <span className="note-tag-hash">#</span>{tag}
+                                                </span>
+                                            ))}
+                                        </div>
+                                    )}
+
+                                    {/* Footer: date + edit/delete */}
+                                    <div className="note-card-footer">
+                                        <span className="note-date">
+                                            <Clock size={11} />
+                                            {formatDate(note.updatedAt ?? note.createdAt)}
+                                        </span>
+                                        <div className="note-card-actions">
+                                            <button
+                                                id={`edit-note-${note._id}`}
+                                                className="note-action-btn edit"
+                                                onClick={() => openEditNote(note)}
+                                                title="Edit note"
+                                                aria-label={`Edit ${note.title}`}
+                                            >
+                                                <Edit2 size={12} />
+                                            </button>
+                                            <button
+                                                id={`delete-note-${note._id}`}
+                                                className="note-action-btn delete"
+                                                onClick={(e) => handleDelete(e, note._id)}
+                                                title="Delete note"
+                                                aria-label={`Delete ${note.title}`}
+                                            >
+                                                <Trash2 size={12} />
+                                            </button>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        ))}
+                    </div>
+                )}
+            </main>
+
+            {/* ── Floating Action Button ── */}
+            <button
+                id="fab-new-note"
+                className="fab"
+                onClick={openNewNote}
+                title="New note"
+                aria-label="Create new note"
+            >
+                <Plus size={22} />
+            </button>
+
+            {/* ── Right Drawer ── */}
+            <NoteDrawer
+                isOpen={drawerOpen}
+                onClose={closeDrawer}
+                formData={formData}
+                setFormData={setFormData}
+                onSave={handleSave}
+                editingNoteId={editingNoteId}
+            />
         </div>
     );
-}
+};
 
 export default Home;

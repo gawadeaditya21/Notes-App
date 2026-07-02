@@ -1,75 +1,158 @@
-import {useState, useContext} from "react";
-import {useNavigate, Link} from 'react-router-dom';
+import { useState, useContext } from 'react';
+import { useNavigate, Link } from 'react-router-dom';
 import API from '../../utils/api.js';
-import {AuthContext} from '../../context/AuthContext.jsx';
+import { AuthContext } from '../../context/AuthContext.jsx';
+import { useTheme } from '../../context/ThemeContext.jsx';
 import toast from 'react-hot-toast';
-import { Mail, Lock, LogIn } from 'lucide-react';
+import { Mail, Lock, LogIn, BookOpen, Moon, Sun } from 'lucide-react';
 
 const Login = () => {
-    const [formData, setFormData] = useState({ email: '', password: ''});
-    const [error, setError] = useState(null);
+    const [formData, setFormData] = useState({ email: '', password: '' });
     const navigate = useNavigate();
-    const {login} = useContext(AuthContext);
+    const { login } = useContext(AuthContext);
+    const { theme, toggleTheme } = useTheme();
 
     const handleChange = (e) => {
-        setFormData({ ...formData, [e.target.name]: e.target.value});
+        setFormData({ ...formData, [e.target.name]: e.target.value });
     };
 
-    const handleSubmit = async(e) => {
+    const handleSubmit = async (e) => {
         e.preventDefault();
-        setError(null);
-
-        try{
+        try {
             const res = await API.post('/auth/login', formData);
             login(res.data);
             toast.success('Welcome back!');
-            navigate('/');
-        } catch(error) {
+            navigate('/', { replace: true });
+        } catch (error) {
             toast.error(error.response?.data?.message || 'Login failed');
         }
-    }
-
+    };
 
     return (
-        <div className="container" style={{ display: 'flex', justifyContent: 'center', marginTop: '10vh' }}>
-            <div className="card animate-card" style={{ width: '100%', maxWidth: '400px', textAlign: 'center' }}>
-                <div style={{ display: 'flex', justifyContent: 'center', marginBottom: '1rem', color: 'var(--primary)' }}>
-                    <LogIn size={40} />
+        <div className="auth-page">
+            {/* ── Left Decorative Panel ── */}
+            <div className="auth-panel-left">
+                <div className="auth-branding">
+                    <div className="auth-logo-icon">
+                        <BookOpen size={36} />
+                    </div>
+                    <h1>NoteFlow</h1>
+                    <p>Your thoughts, beautifully organized. Capture ideas with rich formatting.</p>
                 </div>
-                <h2 style={{ marginBottom: '1.5rem', color: 'var(--text-main)' }}>Welcome Back</h2>
-                
-                <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
-                    <div style={{ position: 'relative' }}>
-                        <Mail size={18} style={{ position: 'absolute', top: '14px', left: '12px', color: 'var(--text-muted)' }} />
-                        <input 
-                            type="email" name="email" placeholder="Email Address" required
-                            value={formData.email} onChange={handleChange}
-                            className="input-field"
-                            style={{ paddingLeft: '40px' }}
-                        />
-                    </div>
-                    
-                    <div style={{ position: 'relative' }}>
-                        <Lock size={18} style={{ position: 'absolute', top: '14px', left: '12px', color: 'var(--text-muted)' }} />
-                        <input 
-                            type="password" name="password" placeholder="Password" required
-                            value={formData.password} onChange={handleChange}
-                            className="input-field"
-                            style={{ paddingLeft: '40px' }}
-                        />
-                    </div>
 
-                    <button type="submit" className="btn btn-primary" style={{ marginTop: '10px' }}>
-                        Login
-                    </button>
-                </form>
-                
-                <p style={{ marginTop: '1.5rem', color: 'var(--text-muted)' }}>
-                    Don't have an account? <Link to="/register" style={{ color: 'var(--primary)', textDecoration: 'none', fontWeight: '500' }}>Register here</Link>
-                </p>
+                <div className="auth-features">
+                    <div className="auth-feature-item">
+                        <span className="auth-feature-dot" />
+                        Rich text editor with formatting
+                    </div>
+                    <div className="auth-feature-item">
+                        <span className="auth-feature-dot" />
+                        Dark &amp; light mode support
+                    </div>
+                    <div className="auth-feature-item">
+                        <span className="auth-feature-dot" />
+                        Secure, cloud-synced notes
+                    </div>
+                    <div className="auth-feature-item">
+                        <span className="auth-feature-dot" />
+                        Fully responsive on all devices
+                    </div>
+                </div>
+            </div>
+
+            {/* ── Right Form Panel ── */}
+            <div className="auth-panel-right">
+                {/* Theme toggle */}
+                <button
+                    className="theme-toggle auth-theme-toggle"
+                    onClick={toggleTheme}
+                    aria-label="Toggle theme"
+                    title={theme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'}
+                    style={{
+                        background: 'var(--accent-muted)',
+                        border: '1.5px solid var(--border-2)',
+                    }}
+                >
+                    <span className="theme-toggle-thumb">
+                        {theme === 'dark' ? <Moon size={12} /> : <Sun size={12} />}
+                    </span>
+                </button>
+
+                <div className="auth-form-card animate-slide-right">
+                    <div className="card card-body">
+                        {/* Form header */}
+                        <div className="auth-form-header">
+                            <div className="auth-form-icon">
+                                <LogIn size={36} />
+                            </div>
+                            <h2>Welcome Back</h2>
+                            <p>Sign in to continue to your notes</p>
+                        </div>
+
+                        {/* Login form */}
+                        <form
+                            id="login-form"
+                            onSubmit={handleSubmit}
+                            className="auth-form"
+                            aria-label="Login form"
+                        >
+                            {/* Email */}
+                            <div className="form-group">
+                                <label htmlFor="login-email" className="form-label">Email Address</label>
+                                <div className="input-wrapper">
+                                    <Mail size={16} className="input-icon" />
+                                    <input
+                                        id="login-email"
+                                        type="email"
+                                        name="email"
+                                        placeholder="you@example.com"
+                                        required
+                                        value={formData.email}
+                                        onChange={handleChange}
+                                        className="input-field"
+                                        autoComplete="email"
+                                    />
+                                </div>
+                            </div>
+
+                            {/* Password */}
+                            <div className="form-group">
+                                <label htmlFor="login-password" className="form-label">Password</label>
+                                <div className="input-wrapper">
+                                    <Lock size={16} className="input-icon" />
+                                    <input
+                                        id="login-password"
+                                        type="password"
+                                        name="password"
+                                        placeholder="••••••••"
+                                        required
+                                        value={formData.password}
+                                        onChange={handleChange}
+                                        className="input-field"
+                                        autoComplete="current-password"
+                                    />
+                                </div>
+                            </div>
+
+                            <button
+                                id="login-submit"
+                                type="submit"
+                                className="btn btn-primary"
+                                style={{ marginTop: '0.5rem' }}
+                            >
+                                <LogIn size={16} /> Sign In
+                            </button>
+                        </form>
+
+                        <p className="auth-footer">
+                            Don&apos;t have an account?{' '}
+                            <Link to="/register">Create one here</Link>
+                        </p>
+                    </div>
+                </div>
             </div>
         </div>
     );
-}
+};
 
 export default Login;

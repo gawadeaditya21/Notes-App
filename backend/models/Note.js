@@ -13,6 +13,14 @@ const noteSchema = new mongoose.Schema({
     content: {
         type: String,
         required: [true, "PLease add some content"]
+    },
+    isFavorite: {
+            type: Boolean,
+            default: false,
+    },
+    tags: {
+            type: [String],
+            default: [],
     }
 }, {timestamps: true});
 
