@@ -2,10 +2,12 @@ import { useState, useEffect, useContext } from 'react';
 import { useNavigate } from 'react-router-dom';
 import API from '../../utils/api';
 import { AuthContext } from '../../context/AuthContext';
+import toast from 'react-hot-toast';
+import { LogOut, Plus, Save, Edit2, Trash2, X } from 'lucide-react'; // Import Icons
 
 const Home = () => {
     const [notes, setNotes] = useState([]);
-    const [formData, setformData] = useState({ title: '', content: ''});
+    const [formData, setFormData] = useState({ title: '', content: ''});
     const [editingNoteId, setEditingNoteId] = useState(null);
 
     const {user, logout} = useContext(AuthContext);
@@ -23,7 +25,7 @@ const Home = () => {
                 const res = await API.get('/notes');
                 setNotes(res.data);
             } catch(error) {    
-                console.error("Failed to fetch notes", error);
+                toast.error("Failed to fetch notes", error);
             }
         };
         fetchNotes();
@@ -38,28 +40,28 @@ const Home = () => {
                 const res = await API.put(`/notes/${editingNoteId}`, formData);
                 setNotes(notes.map((note) => note._id = editingNoteId ? res.data : note));
                 setEditingNoteId(null);
-
+                toast.success("Note updated successfully!");
             } else {
                 const res = await API.post('/notes', formData);
                 setNotes([res.data, ...notes]);
-            
+                toast.success("Note created!");
             }
-            setformData({title: '', content:''});
+            setFormData({title: '', content:''});
         } catch(error) {
-            console.error("Failed to create note", error);
+            toast.error("Failed to create note", error);
         }
     };
 
     // SETUP EDIT MODE
     const handleEditSetup = (note) => {
-        setformData({ title: note.title, content: note.content});
+        setFormData({ title: note.title, content: note.content});
         setEditingNoteId(note._id);
         window.scrollTo({ top: 0, behavior: 'smooth'});
     };
 
     // CANCEL EDIT MODE
     const cancelEdit = () =>{
-        setformData({ title: '', content: ''});
+        setFormData({ title: '', content: ''});
         setEditingNoteId(null);
     };
 
@@ -68,89 +70,94 @@ const Home = () => {
         try {
             await API.delete(`/notes/${id}`);
             setNotes(notes.filter((note) => note._id != id));
+            toast.success("Note deleted");
         } catch(error) {
-            console.error("Failed to create note", error);
+            toast.error("Failed to create note", error);
         }
     };
 
     const handleLogout = () => {
         logout();
+        toast.success("Logged out successfully");
         navigate('login');
     }
 
     if (!user) return null;
 
     return (
-        <div style={{ maxWidth: '800px', margin: '0 auto', padding: '20px' }}>
+        <div className="container">
             {/* Header Area */}
-            <header style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
-                <h2>Welcome, {user.name}</h2>
-                <button 
-                    onClick={handleLogout} 
-                    style={{ background: '#ff4d4d', color: 'white', border: 'none', padding: '8px 15px', borderRadius: '5px', cursor: 'pointer' }}
-                >
-                    Logout
+            <header className="flex-between" style={{ marginBottom: '2rem' }}>
+                <h2 style={{ color: 'var(--text-main)' }}>Welcome, {user.name}</h2>
+                <button onClick={handleLogout} className="btn btn-danger">
+                    <LogOut size={18} /> Logout
                 </button>
             </header>
 
-            {/* Dynamic Create/Update Form */}
-            <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '10px', marginBottom: '30px', background: '#f9f9f9', padding: '20px', borderRadius: '8px' }}>
-                {/* Dynamically change the title based on edit mode */}
-                <h3>{editingNoteId ? 'Update Note' : 'Add a New Note'}</h3>
-                <input 
-                    type="text" 
-                    placeholder="Note Title" 
-                    value={formData.title}
-                    onChange={(e) => setFormData({ ...formData, title: e.target.value })}
-                    required 
-                    style={{ padding: '10px' }}
-                />
-                <textarea 
-                    placeholder="Note Content" 
-                    value={formData.content}
-                    onChange={(e) => setFormData({ ...formData, content: e.target.value })}
-                    required 
-                    rows="4"
-                    style={{ padding: '10px' }}
-                />
-                
-                <div style={{ display: 'flex', gap: '10px' }}>
-                    <button type="submit" style={{ flex: 1, padding: '10px', background: editingNoteId ? '#28a745' : '#007bff', color: 'white', border: 'none', borderRadius: '5px', cursor: 'pointer' }}>
-                        {editingNoteId ? 'Update Note' : 'Save Note'}
-                    </button>
+            {/* Dynamic Form */}
+            <div className="card animate-card">
+                <h3 style={{ marginBottom: '1rem', color: 'var(--primary)' }}>
+                    {editingNoteId ? 'Update your Note' : 'Create a New Note'}
+                </h3>
+                <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+                    <input 
+                        type="text" 
+                        placeholder="Note Title" 
+                        value={formData.title}
+                        onChange={(e) => setFormData({ ...formData, title: e.target.value })}
+                        required 
+                        className="input-field"
+                    />
+                    <textarea 
+                        placeholder="Note Content" 
+                        value={formData.content}
+                        onChange={(e) => setFormData({ ...formData, content: e.target.value })}
+                        required 
+                        rows="4"
+                        className="input-field"
+                    />
                     
-                    {/* Show a Cancel button only if we are in edit mode */}
-                    {editingNoteId && (
-                        <button type="button" onClick={cancelEdit} style={{ flex: 1, padding: '10px', background: '#6c757d', color: 'white', border: 'none', borderRadius: '5px', cursor: 'pointer' }}>
-                            Cancel Edit
+                    <div className="flex-gap">
+                        <button type="submit" className="btn btn-primary" style={{ flex: 1 }}>
+                            {editingNoteId ? <><Save size={18} /> Update Note</> : <><Plus size={18} /> Save Note</>}
                         </button>
-                    )}
-                </div>
-            </form>
+                        
+                        {editingNoteId && (
+                            <button type="button" onClick={cancelEdit} className="btn" style={{ background: 'var(--text-muted)', color: 'white', flex: 1 }}>
+                                <X size={18} /> Cancel
+                            </button>
+                        )}
+                    </div>
+                </form>
+            </div>
 
-            {/* Display Notes List */}
-            <div>
+            {/* Display Notes Grid */}
+            <div className="notes-grid">
                 {notes.length === 0 ? (
-                    <p style={{ textAlign: 'center', color: '#666' }}>No notes yet. Create your first one above!</p>
+                    <p style={{ gridColumn: '1 / -1', textAlign: 'center', color: 'var(--text-muted)', padding: '2rem' }}>
+                        No notes yet. Create your first one above!
+                    </p>
                 ) : (
-                    notes.map((note) => (
-                        <div key={note._id} style={{ border: '1px solid #ddd', padding: '15px', marginBottom: '15px', borderRadius: '8px', position: 'relative' }}>
-                            <h3 style={{ marginTop: '0', paddingRight: '120px' }}>{note.title}</h3>
-                            <p style={{ whiteSpace: 'pre-wrap' }}>{note.content}</p>
+                    notes.map((note, index) => (
+                        <div 
+                            key={note._id} 
+                            className="card animate-card" 
+                            style={{ animationDelay: `${index * 0.05}s` }} /* Staggers the fade-in animation */
+                        >
+                            <h3 style={{ marginBottom: '0.5rem', paddingRight: '70px', color: 'var(--text-main)' }}>
+                                {note.title}
+                            </h3>
+                            <p style={{ color: 'var(--text-muted)', whiteSpace: 'pre-wrap', lineHeight: '1.5' }}>
+                                {note.content}
+                            </p>
                             
-                            {/* Action Buttons Container */}
-                            <div style={{ position: 'absolute', top: '15px', right: '15px', display: 'flex', gap: '10px' }}>
-                                <button 
-                                    onClick={() => handleEditSetup(note)} 
-                                    style={{ background: '#ffc107', color: 'black', border: 'none', padding: '5px 10px', borderRadius: '3px', cursor: 'pointer' }}
-                                >
-                                    Edit
+                            {/* Floating Action Icons */}
+                            <div className="flex-gap" style={{ position: 'absolute', top: '1.5rem', right: '1.5rem' }}>
+                                <button onClick={() => handleEditSetup(note)} className="btn btn-warning btn-icon-only">
+                                    <Edit2 size={16} />
                                 </button>
-                                <button 
-                                    onClick={() => handleDeleteNote(note._id)} 
-                                    style={{ background: '#ff4d4d', color: 'white', border: 'none', padding: '5px 10px', borderRadius: '3px', cursor: 'pointer' }}
-                                >
-                                    Delete
+                                <button onClick={() => handleDeleteNote(note._id)} className="btn btn-danger btn-icon-only">
+                                    <Trash2 size={16} />
                                 </button>
                             </div>
                         </div>
