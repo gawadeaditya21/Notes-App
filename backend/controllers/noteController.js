@@ -39,7 +39,7 @@ export const updateNote = async(req, res) => {
             return res.status(401).json({message: "User not authorized to update this note"});
         }
 
-        const updatedNote = await Note.findByIdAndUpdate(req.params.id, req.body, {new: true});
+        const updatedNote = await Note.findByIdAndUpdate(req.params.id, req.body, {returnDocument: 'after'});
         res.status(200).json(updatedNote);
     } catch(error) {
         res.status(500).json({message: error.message});

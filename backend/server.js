@@ -1,3 +1,7 @@
+import dns from "dns";
+// Force Node to use Google DNS to bypass local ISP/Router SRV query blocking
+dns.setServers(["8.8.8.8", "8.8.4.4"]);
+
 import express from "express";
 import mongoose from "mongoose";
 import cors from "cors";
